@@ -6,16 +6,20 @@ import {
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert } from "react-native";
+
 import {
   User,
   LoginFormData,
   RegisterFormData,
-  AuthResponse,
+  AuthApiResponse,
 } from "../types/auth";
-import { BecomeDeliveryFormData } from "../types/delivery";
+import { authService } from "../services/authService";
+import { mapJwtToUser } from "../utils/jwt";
 
 const USER_STORAGE_KEY = "@goodfood_user_session";
-const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
+const ACCESS_TOKEN_KEY = "@goodfood_auth_token";
+const REFRESH_TOKEN_KEY = "@goodfood_refresh_token";
 
 interface AuthContextType {
   user: User | null;
@@ -24,7 +28,6 @@ interface AuthContextType {
   login: (data: LoginFormData) => Promise<void>;
   register: (data: RegisterFormData) => Promise<void>;
   logout: () => Promise<void>;
-  upgradeToDelivery: (data: BecomeDeliveryFormData) => Promise<void>;
   updateProfile: (data: {
     fullName: string;
     email: string;
@@ -43,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function loadStoredSession() {
       try {
         const [storedToken, storedUser] = await AsyncStorage.multiGet([
-          TOKEN_STORAGE_KEY,
+          ACCESS_TOKEN_KEY,
           USER_STORAGE_KEY,
         ]);
 
@@ -55,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(JSON.parse(userVal));
         }
       } catch (error) {
-        console.error("Erreur lors du chargement de la session :", error);
+        console.error("Erreur chargement session :", error);
       } finally {
         setIsLoading(false);
       }
@@ -64,35 +67,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadStoredSession();
   }, []);
 
-  const handleAuthSuccess = async (response: AuthResponse) => {
-    setUser(response.user);
-    setToken(response.token);
+  const handleAuthSuccess = async (response: AuthApiResponse) => {
+    const userFromJwt = mapJwtToUser(response.access_token);
+
+    setUser(userFromJwt);
+    setToken(response.access_token);
 
     await AsyncStorage.multiSet([
-      [TOKEN_STORAGE_KEY, response.token],
-      [USER_STORAGE_KEY, JSON.stringify(response.user)],
+      [ACCESS_TOKEN_KEY, response.access_token],
+      [REFRESH_TOKEN_KEY, response.refresh_token],
+      [USER_STORAGE_KEY, JSON.stringify(userFromJwt)],
     ]);
   };
 
   const login = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      // Simulation d'un retour d'API
-      const mockResponse: AuthResponse = {
-        token: "jwt_token_async_storage_123",
-        user: {
-          id: "usr_101",
-          fullName: "Jean Dupont",
-          email: data.email,
-          role: {
-            id: "role_client",
-            name: "Livreur",
-          },
-          createdAt: new Date().toISOString(),
-        },
-      };
-
-      await handleAuthSuccess(mockResponse);
+      const response = await authService.login(data);
+      await handleAuthSuccess(response);
+    } catch (error: any) {
+      Alert.alert(
+        "Échec de la connexion",
+        error.message || "Identifiants incorrects.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -101,23 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (data: RegisterFormData) => {
     setIsLoading(true);
     try {
-      // Simulation d'un retour d'API
-      const mockResponse: AuthResponse = {
-        token: "jwt_token_async_storage_456",
-        user: {
-          id: "usr_102",
-          fullName: data.fullName,
-          email: data.email,
-          phone: data.phone,
-          role: {
-            id: "role_client",
-            name: "Livreur",
-          },
-          createdAt: new Date().toISOString(),
-        },
-      };
-
-      await handleAuthSuccess(mockResponse);
+      const response = await authService.register(data);
+      await handleAuthSuccess(response);
+    } catch (error: any) {
+      Alert.alert(
+        "Échec de l’inscription",
+        error.message || "Une erreur est survenue.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -128,27 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setUser(null);
       setToken(null);
-      await AsyncStorage.multiRemove([TOKEN_STORAGE_KEY, USER_STORAGE_KEY]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const upgradeToDelivery = async (data: BecomeDeliveryFormData) => {
-    if (!user) return;
-
-    setIsLoading(true);
-    try {
-      const updatedUser: User = {
-        ...user,
-        role: {
-          id: "role_delivery",
-          name: "Livreur",
-        },
-      };
-
-      setUser(updatedUser);
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      await AsyncStorage.multiRemove([
+        ACCESS_TOKEN_KEY,
+        REFRESH_TOKEN_KEY,
+        USER_STORAGE_KEY,
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -160,21 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     phone: string;
   }) => {
     if (!user) return;
-
-    setIsLoading(true);
-    try {
-      const updatedUser: User = {
-        ...user,
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone,
-      };
-
-      setUser(updatedUser);
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
-    } finally {
-      setIsLoading(false);
-    }
+    const updatedUser: User = { ...user, ...data };
+    setUser(updatedUser);
+    await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
   };
 
   return (
@@ -186,7 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
-        upgradeToDelivery,
         updateProfile,
       }}
     >

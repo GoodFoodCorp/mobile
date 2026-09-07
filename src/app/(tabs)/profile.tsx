@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AuthInput from "../../components/AuthInput";
@@ -53,8 +54,30 @@ export default function ProfileScreen() {
 
   const handleSubmit = async () => {
     if (mode === "login") {
+      if (!loginData.email.trim() || !loginData.password.trim()) {
+        Alert.alert(
+          "Champs requis",
+          "Veuillez renseigner votre adresse e-mail et votre mot de passe.",
+        );
+        return;
+      }
       await login(loginData);
     } else {
+      if (
+        !registerData.fullName.trim() ||
+        !registerData.email.trim() ||
+        !registerData.password.trim()
+      ) {
+        Alert.alert(
+          "Champs requis",
+          "Veuillez remplir tous les champs obligatoires.",
+        );
+        return;
+      }
+      if (registerData.password !== registerData.confirmPassword) {
+        Alert.alert("Erreur", "Les mots de passe ne correspondent pas.");
+        return;
+      }
       await register(registerData);
     }
   };
