@@ -1,20 +1,8 @@
-import { Role } from "./role";
-// Données saisies lors de la connexion
-export interface LoginFormData {
-  email: string;
-  password: string;
+export interface Role {
+  id: string;
+  name: string;
 }
 
-// Données saisies lors de l'inscription
-export interface RegisterFormData {
-  fullName: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-}
-
-// Modèle utilisateur (stocké dans le state global / AsyncStorage après connexion)
 export interface User {
   id: string;
   fullName: string;
@@ -25,8 +13,33 @@ export interface User {
   createdAt: string;
 }
 
-// Réponse d'authentification API
-export interface AuthResponse {
-  user: User;
-  token: string;
+// Payload extrait du JWT
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  roles?: string[];
+  role_slugs?: string[];
+  exp: number;
+}
+
+// Réponse brute exacte de l'API
+export interface AuthApiResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  message: string;
+}
+
+export interface LoginFormData {
+  email: string;
+  password: string;
+}
+
+export interface RegisterFormData {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
 }
