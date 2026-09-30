@@ -1,4 +1,34 @@
 export type VehicleType = "bike" | "ebike" | "scooter" | "car";
+export type DeliveryStatus =
+  | "UNASSIGNED"
+  | "ASSIGNED"
+  | "PICKED_UP"
+  | "IN_TRANSIT"
+  | "DELIVERED"
+  | "CANCELLED";
+
+export interface DeliveryLocation {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+export interface DeliveryDetail {
+  _id: string;
+  orderId: string;
+  customerId: string;
+  restaurantId: string;
+  livreurId: string | null;
+  status: DeliveryStatus;
+  pickup: DeliveryLocation;
+  dropoff: DeliveryLocation;
+  assignedAt: string | null;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  estimatedDeliveryTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface BecomeDeliveryFormData {
   vehicleType: VehicleType;

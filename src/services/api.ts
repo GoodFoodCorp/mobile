@@ -21,9 +21,15 @@ export async function apiClient<T>(
 
   if (requiresAuth) {
     const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
-    if (token) {
-      requestHeaders["Authorization"] = `Bearer ${token}`;
+
+    if (!token) {
+      console.warn(
+        `[API] Requête vers ${endpoint} bloquée : aucun token trouvé dans le stockage.`,
+      );
+      throw new Error("Session expirée ou utilisateur non authentifié.");
     }
+
+    requestHeaders["Authorization"] = `Bearer ${token}`;
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {

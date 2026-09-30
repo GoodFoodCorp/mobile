@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,61 +6,112 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
-import { User } from "../types/auth";
-import { AvailableDelivery } from "../types/delivery";
-import SectionHeader from "./SectionHeader";
+import { backgroundLocationService } from "../services/backgroundLocationService";
+import { deliveryService } from "../services/deliveryService";
 import { useTheme } from "../context/ThemeContext";
+import { User } from "../types/auth";
+import { DeliveryDetail } from "../types/delivery";
+import SectionHeader from "./SectionHeader";
 import { deliveryHomeStyles as styles } from "../styles/deliveryHome.styles";
 
 interface DeliveryHomeViewProps {
   user: User;
 }
 
-const MOCK_AVAILABLE_ORDERS: AvailableDelivery[] = [
-  {
-    id: "del_1",
-    orderNumber: "#GF-1044",
-    restaurantName: "Burger Deluxe (République)",
-    restaurantAddress: "12 Rue du Faubourg du Temple",
-    deliveryAddress: "48 Boulevard Voltaire",
-    distanceRestaurantKm: 0.6,
-    deliveryDistanceKm: 1.8,
-    earnings: 7.2,
-    itemsCount: 3,
-    pickupTimeLimit: "10 min",
-  },
-  {
-    id: "del_2",
-    orderNumber: "#GF-1049",
-    restaurantName: "Pizza Margherita Express",
-    restaurantAddress: "5 Place de la Bastille",
-    deliveryAddress: "19 Rue de Charonne",
-    distanceRestaurantKm: 1.1,
-    deliveryDistanceKm: 2.2,
-    earnings: 8.5,
-    itemsCount: 2,
-    pickupTimeLimit: "15 min",
-  },
-];
-
 export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
   const [isOnline, setIsOnline] = useState(true);
+  const [deliveries, setDeliveries] = useState<DeliveryDetail[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
   const { colors } = useTheme();
 
-  const handleAcceptOrder = (order: AvailableDelivery) => {
-    Alert.alert(
-      "Course acceptée !",
-      `Rendez-vous à : ${order.restaurantName}\nRécupération sous ${order.pickupTimeLimit}.`,
+  // Récupération des commandes réelles depuis l'API
+  const fetchOrders = useCallback(async () => {
+    try {
+      const data = await deliveryService.getAvailableDeliveries();
+      setDeliveries(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      console.error("Erreur récupération commandes prêtes :", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOnline) {
+      setLoading(true);
+      fetchOrders().finally(() => setLoading(false));
+    }
+  }, [isOnline, fetchOrders]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchOrders();
+    setRefreshing(false);
+  };
+
+  // Toggle du statut en ligne
+  const handleToggleOnline = async (value: boolean) => {
+    setIsOnline(value);
+    if (value) {
+      const ok = await backgroundLocationService.startTracking();
+      if (!ok) {
+        Alert.alert(
+          "Autorisation requise",
+          'Veuillez activer la localisation "Toujours autoriser" dans vos réglages pour recevoir des commandes.',
+        );
+      }
+      fetchOrders();
+    } else {
+      await backgroundLocationService.stopTracking();
+      setDeliveries([]);
+    }
+  };
+
+  // Tri par date de commande (les plus anciennes à livrer en priorité)
+  const sortedDeliveries = useMemo(() => {
+    return [...deliveries].sort(
+      (a, b) =>
+        new Date(a.estimatedDeliveryTime).getTime() -
+        new Date(b.estimatedDeliveryTime).getTime(),
     );
+  }, [deliveries]);
+
+  const handleAcceptDelivery = async (delivery: DeliveryDetail) => {
+    try {
+      await deliveryService.acceptDelivery(delivery._id);
+      Alert.alert(
+        "Course acceptée !",
+        "Rendez-vous au restaurant pour récupérer la commande.",
+        [
+          {
+            text: "Voir la course",
+            onPress: () =>
+              router.push({
+                pathname: "/delivery",
+                params: { deliveryId: delivery._id },
+              }),
+          },
+        ],
+      );
+      fetchOrders();
+    } catch (error: any) {
+      Alert.alert(
+        "Erreur",
+        error.message || "Impossible de prendre en charge cette course.",
+      );
+    }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* En-tête statut du livreur */}
+      {/* En-tête */}
       <View style={[styles.statusHeader, { backgroundColor: colors.primary }]}>
         <SafeAreaView edges={["top"]}>
           <View style={styles.statusTopRow}>
@@ -87,9 +138,9 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
               </Text>
               <Switch
                 value={isOnline}
-                onValueChange={setIsOnline}
-                trackColor={{ false: colors.inactive, true: colors.accent }}
-                thumbColor={colors.white}
+                onValueChange={handleToggleOnline}
+                trackColor={{ false: "#7f8c8d", true: "#27ae60" }}
+                thumbColor="#ffffff"
               />
             </View>
           </View>
@@ -99,122 +150,141 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
-        {/* Résumé journalier */}
-        <View
-          style={[
-            styles.statsGrid,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>48,50 €</Text>
-            <Text style={styles.statLabel}>Aujourd'hui</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>6</Text>
-            <Text style={styles.statLabel}>Courses</Text>
-          </View>
-          <View style={[styles.statItem, styles.statItemLast]}>
-            <Text style={styles.statValue}>2h 15m</Text>
-            <Text style={styles.statLabel}>En ligne</Text>
-          </View>
-        </View>
-
         {isOnline ? (
           <>
-            <View
-              style={[
-                styles.zoneAlert,
-                {
-                  backgroundColor: colors.accentLight,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Ionicons
-                name="flame-outline"
-                size={20}
-                color={colors.primaryDark}
+            <SectionHeader title="Commandes prêtes à livrer" />
+
+            {loading ? (
+              <ActivityIndicator
+                size="large"
+                color={colors.primary}
+                style={{ marginTop: 30 }}
               />
-              <Text style={styles.zoneAlertText}>
-                Forte demande actuellement vers Paris République / Bastille
-                (+1,50 € / course).
-              </Text>
-            </View>
-
-            <SectionHeader title="Courses disponibles à proximité" />
-
-            {MOCK_AVAILABLE_ORDERS.map((order) => (
+            ) : sortedDeliveries.length === 0 ? (
               <View
-                key={order.id}
-                style={[
-                  styles.orderCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
+                style={{
+                  alignItems: "center",
+                  marginTop: 40,
+                  paddingHorizontal: 20,
+                }}
               >
-                <View style={styles.orderCardHeader}>
-                  <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-                  <View style={styles.earningsTag}>
-                    <Text style={styles.earningsText}>
-                      +{order.earnings.toFixed(2)} €
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Étape 1 : Retrait */}
-                <View style={styles.routeStep}>
-                  <Ionicons
-                    name="storefront-outline"
-                    size={16}
-                    color={colors.primary}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.routeStepText}>
-                      {order.restaurantName}
-                    </Text>
-                    <Text style={styles.routeStepSub}>
-                      {order.restaurantAddress} ({order.distanceRestaurantKm}{" "}
-                      km)
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Étape 2 : Livraison */}
-                <View style={styles.routeStep}>
-                  <Ionicons
-                    name="location-outline"
-                    size={16}
-                    color={colors.accent}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.routeStepText}>
-                      {order.deliveryAddress}
-                    </Text>
-                    <Text style={styles.routeStepSub}>
-                      Distance client : {order.deliveryDistanceKm} km
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.orderFooter}>
-                  <Text style={styles.orderDistanceMeta}>
-                    {order.itemsCount} articles • Prêt dans{" "}
-                    {order.pickupTimeLimit}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.acceptBtn}
-                    onPress={() => handleAcceptOrder(order)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.acceptBtnText}>Accepter</Text>
-                  </TouchableOpacity>
-                </View>
+                <Ionicons
+                  name="bicycle-outline"
+                  size={40}
+                  color={colors.textSecondary}
+                />
+                <Text
+                  style={{
+                    color: colors.textDark,
+                    fontWeight: "bold",
+                    marginTop: 10,
+                    fontSize: 16,
+                  }}
+                >
+                  Aucune commande prête
+                </Text>
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  Tirez vers le bas pour actualiser ou restez connecté.
+                </Text>
               </View>
-            ))}
+            ) : (
+              sortedDeliveries.map((delivery) => {
+                const courierFee = (4.5).toFixed(2); // Rémunération estimée
+
+                return (
+                  <View
+                    key={delivery._id}
+                    style={[
+                      styles.orderCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.orderCardHeader}>
+                      <Text style={styles.orderNumber}>
+                        #{delivery.orderId.slice(0, 8)}
+                      </Text>
+                      <View style={styles.earningsTag}>
+                        <Text style={styles.earningsText}>+{courierFee} €</Text>
+                      </View>
+                    </View>
+
+                    {/* Adresse de destination */}
+                    <View style={styles.routeStep}>
+                      <Ionicons
+                        name="location-outline"
+                        size={18}
+                        color={colors.accent}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.routeStepText,
+                            { color: colors.textDark, fontWeight: "600" },
+                          ]}
+                        >
+                          Adresse de livraison
+                        </Text>
+                        <Text
+                          style={[
+                            styles.routeStepSub,
+                            { color: colors.textSecondary },
+                          ]}
+                        >
+                          {delivery.dropoff.address}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Pied de carte */}
+                    <View style={styles.orderFooter}>
+                      <View>
+                        <Text style={styles.orderDistanceMeta}>
+                          Départ : {delivery.pickup.address}
+                        </Text>
+                        <Text
+                          style={[styles.orderDistanceMeta, { fontSize: 11 }]}
+                        >
+                          Livraison estimée à{" "}
+                          {new Date(
+                            delivery.estimatedDeliveryTime,
+                          ).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.acceptBtn}
+                        onPress={() => handleAcceptDelivery(delivery)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.acceptBtnText}>
+                          Prendre en charge
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </>
         ) : (
           <View style={styles.offlinePlaceholder}>
