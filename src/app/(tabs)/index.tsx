@@ -1,4 +1,4 @@
-import { View, ScrollView } from "react-native";
+import { View, ScrollView, Alert, ActivityIndicator } from "react-native";
 
 import Header from "../../components/Header";
 import HeroBanner from "../../components/HeroBanner";
@@ -10,6 +10,7 @@ import DishCard from "../../components/DishCard";
 import DeliveryHomeView from "../../components/DeliveryHomeView";
 
 import { useAuth } from "../../context/AuthContext";
+import { useLocation } from "../../context/LocationContext";
 
 import { useTheme } from "../../context/ThemeContext";
 import { Category, Dish } from "../../types/food";
@@ -84,6 +85,27 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
   const isDelivery = user?.role?.name?.toLowerCase() === "livreur";
+  const {
+    displayLocation,
+    requestLocation,
+    isLoading: isLocating,
+  } = useLocation();
+
+  const handleLocationPress = async () => {
+    Alert.alert(
+      "Localisation",
+      "Voulez-vous actualiser votre position GPS actuelle ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Actualiser",
+          onPress: async () => {
+            await requestLocation();
+          },
+        },
+      ],
+    );
+  };
 
   // 1. Vue spécifique LIVREUR
   if (user && isDelivery) {
@@ -102,8 +124,10 @@ export default function HomeScreen() {
         <HeroBanner onOrderPress={() => {}} />
 
         <LocationSelector
-          address="Paris République, 75001"
-          onPress={() => {}}
+          address={
+            isLocating ? "Recherche de votre position..." : displayLocation
+          }
+          onPress={handleLocationPress}
         />
 
         <PromoCard onClaim={() => {}} />
