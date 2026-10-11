@@ -8,7 +8,15 @@ export const DRIVER_LAST_LOCATION_KEY = "@goodfood_driver_last_coords";
 // 1. Définition de la tâche exécutée même app fermée/en tâche de fond
 TaskManager.defineTask(LOCATION_BACKGROUND_TASK, async ({ data, error }) => {
   if (error) {
-    console.error("Erreur tâche de fond géolocalisation :", error);
+    // kCLErrorLocationUnknown (iOS, code 0) : position pas encore disponible
+    // (démarrage du GPS, intérieur, simulateur). Transitoire : CoreLocation
+    // continue d'essayer et les mises à jour reprennent seules.
+    const code = (error as { code?: number | string }).code;
+    if (code === 0 || code === "0") {
+      console.warn("Position GPS momentanément indisponible, nouvel essai.");
+    } else {
+      console.error("Erreur tâche de fond géolocalisation :", error);
+    }
     return;
   }
 

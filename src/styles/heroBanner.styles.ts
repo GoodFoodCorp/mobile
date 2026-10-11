@@ -7,7 +7,7 @@ export const heroBannerStyles = StyleSheet.create({
     height: 220,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(3, 69, 44, 0.72)",
     justifyContent: "center",
     alignItems: "center",

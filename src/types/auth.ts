@@ -24,10 +24,10 @@ export interface JwtPayload {
 
 // Réponse brute exacte de l'API
 export interface AuthApiResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
+  access_token?: string;
+  refresh_token?: string;
+  token_type?: string;
+  expires_in?: number;
   message: string;
 }
 

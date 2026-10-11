@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import AuthInput from "../../components/AuthInput";
 import { useTheme } from "../../context/ThemeContext";
 import { subscreenStyles as styles } from "../../styles/subscreens.styles";
+import { authService } from "../../services/authService";
 
 export default function SecurityScreen() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function SecurityScreen() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const handleUpdatePassword = () => {
+  const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert("Erreur", "Veuillez remplir tous les champs.");
       return;
@@ -26,9 +27,14 @@ export default function SecurityScreen() {
       return;
     }
 
-    Alert.alert("Succès", "Votre mot de passe a bien été modifié.", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+    try {
+      await authService.changePassword(currentPassword, newPassword);
+      Alert.alert("Succès", "Votre mot de passe a bien été modifié.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (error: any) {
+      Alert.alert("Modification impossible", error.message);
+    }
   };
 
   return (

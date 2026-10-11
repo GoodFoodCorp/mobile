@@ -26,6 +26,8 @@ export function NotificationListener() {
           router.push("/orders");
         } else if (data?.screen === "delivery") {
           router.push("/delivery");
+        } else if (data?.screen === "delivery-home") {
+          router.push("/");
         }
       },
     );

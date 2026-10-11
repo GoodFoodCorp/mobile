@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Switch } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Switch,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -7,6 +14,8 @@ import { useRouter } from "expo-router";
 import { VehicleType } from "../../../types/delivery";
 import { useTheme } from "../../../context/ThemeContext";
 import { deliverySpaceStyles as styles } from "../../../styles/deliverySpace.styles";
+import { courierService } from "../../../services/courierService";
+import { CourierProfile } from "../../../types/courier";
 
 const VEHICLES: {
   id: VehicleType;
@@ -23,8 +32,30 @@ export default function VehicleStatusScreen() {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [isAvailable, setIsAvailable] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleType>("bike");
+  const [profile, setProfile] = useState<CourierProfile | null>(null);
+
+  useEffect(() => {
+    courierService
+      .getProfile()
+      .then((value) => {
+        setProfile(value);
+        setIsAvailable(value.isAvailable);
+        setSelectedVehicle(value.vehicleType);
+      })
+      .catch((error: any) => Alert.alert("Profil indisponible", error.message));
+  }, []);
+
+  const toggleAvailability = async (value: boolean) => {
+    try {
+      const updated = await courierService.setAvailability(value);
+      setProfile(updated);
+      setIsAvailable(updated.isAvailable);
+    } catch (error: any) {
+      Alert.alert("Mise à jour impossible", error.message);
+    }
+  };
 
   return (
     <SafeAreaView
@@ -68,7 +99,7 @@ export default function VehicleStatusScreen() {
           </View>
           <Switch
             value={isAvailable}
-            onValueChange={setIsAvailable}
+            onValueChange={toggleAvailability}
             trackColor={{ false: colors.inactive, true: colors.primary }}
             thumbColor={isAvailable ? colors.primary : colors.white}
           />
@@ -131,7 +162,7 @@ export default function VehicleStatusScreen() {
               Zone de livraison
             </Text>
             <Text style={[styles.infoValue, { color: colors.textDark }]}>
-              Paris Centre (75)
+              {profile?.city ?? "Non renseignée"}
             </Text>
           </View>
         </View>

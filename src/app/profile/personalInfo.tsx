@@ -20,7 +20,7 @@ import { personalInfoStyles as styles } from "../../styles/personalInfo.styles";
 
 export default function PersonalInfoScreen() {
   const router = useRouter();
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, deleteAccount } = useAuth();
   const { colors } = useTheme();
 
   // Initialisation du state avec les données de l'utilisateur
@@ -59,7 +59,14 @@ export default function PersonalInfoScreen() {
         {
           text: "Supprimer",
           style: "destructive",
-          onPress: () => console.log("Suppression du compte..."),
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              router.replace("/(tabs)/profile");
+            } catch (error: any) {
+              Alert.alert("Suppression impossible", error.message);
+            }
+          },
         },
       ],
     );

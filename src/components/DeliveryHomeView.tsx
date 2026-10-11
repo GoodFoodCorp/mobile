@@ -15,6 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { backgroundLocationService } from "../services/backgroundLocationService";
 import { deliveryService } from "../services/deliveryService";
+import { courierService } from "../services/courierService";
+import { registerCourierPushToken } from "../services/pushRegistration";
+import { useAvailableDeliveriesSocket } from "../hooks/useAvailableDeliveriesSocket";
 import { useTheme } from "../context/ThemeContext";
 import { User } from "../types/auth";
 import { DeliveryDetail } from "../types/delivery";
@@ -26,7 +29,7 @@ interface DeliveryHomeViewProps {
 }
 
 export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(false);
   const [deliveries, setDeliveries] = useState<DeliveryDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,6 +53,22 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
     }
   }, [isOnline, fetchOrders]);
 
+  // Le statut « en ligne » vient du serveur (isAvailable du profil coursier).
+  useEffect(() => {
+    courierService
+      .getProfile()
+      .then((profile) => setIsOnline(profile.isAvailable))
+      .catch(() => undefined);
+  }, []);
+
+  // Token push enregistré dès que le livreur est en ligne.
+  useEffect(() => {
+    if (isOnline) registerCourierPushToken().catch(() => undefined);
+  }, [isOnline]);
+
+  // Nouvelles commandes en temps réel.
+  useAvailableDeliveriesSocket(isOnline, fetchOrders);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchOrders();
@@ -59,6 +78,16 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
   // Toggle du statut en ligne
   const handleToggleOnline = async (value: boolean) => {
     setIsOnline(value);
+    try {
+      await courierService.setAvailability(value);
+    } catch (error: any) {
+      setIsOnline(!value);
+      Alert.alert(
+        "Erreur",
+        error.message || "Impossible de changer votre statut.",
+      );
+      return;
+    }
     if (value) {
       const ok = await backgroundLocationService.startTracking();
       if (!ok) {

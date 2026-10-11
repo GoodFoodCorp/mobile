@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notificationService } from "../../services/notificationService";
 import { useTheme } from "../../context/ThemeContext";
 import { subscreenStyles as styles } from "../../styles/subscreens.styles";
+import { settingsService } from "../../services/settingsService";
 
 const STORAGE_KEY = "@goodfood_notifications_prefs";
 
@@ -42,6 +43,16 @@ export default function NotificationsScreen() {
       }
     }
     loadPreferences();
+    settingsService
+      .get()
+      .then((settings) =>
+        setPrefs({
+          orderTracking: settings.order_tracking,
+          promos: settings.promos,
+          newsletter: settings.newsletter,
+        }),
+      )
+      .catch(() => undefined);
   }, []);
 
   const togglePreference = async (key: keyof NotificationPrefs) => {
@@ -61,6 +72,13 @@ export default function NotificationsScreen() {
     const updated = { ...prefs, [key]: nextState };
     setPrefs(updated);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    try {
+      await settingsService.update({
+        [key === "orderTracking" ? "order_tracking" : key]: nextState,
+      });
+    } catch (error: any) {
+      Alert.alert("Synchronisation impossible", error.message);
+    }
   };
 
   return (

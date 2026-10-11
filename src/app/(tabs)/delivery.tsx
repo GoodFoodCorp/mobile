@@ -7,16 +7,18 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";
 import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { deliveryService } from "../../services/deliveryService";
+import DeliveryListView from "../../components/DeliveryListView";
 import { DeliveryDetail } from "../../types/delivery";
 import { useTheme } from "../../context/ThemeContext";
 import { subscreenStyles as styles } from "../../styles/subscreens.styles";
@@ -106,12 +108,26 @@ function getManeuverLabel(step: RouteStep) {
 }
 
 export default function DeliveryScreen() {
+  const params = useLocalSearchParams<{ deliveryId?: string }>();
+
+  return params.deliveryId ? (
+    <DeliveryDetailView
+      key={params.deliveryId}
+      deliveryId={params.deliveryId}
+    />
+  ) : (
+    <DeliveryListView />
+  );
+}
+
+function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
   const { colors } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ deliveryId?: string }>();
+  const goToList = () => router.setParams({ deliveryId: undefined });
 
   const [delivery, setDelivery] = useState<DeliveryDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(
@@ -130,8 +146,8 @@ export default function DeliveryScreen() {
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
 
-  const fetchDelivery = useCallback(async (id: string) => {
-    setLoading(true);
+  const fetchDelivery = useCallback(async (id: string, silent = false) => {
+    if (!silent) setLoading(true);
     setLoadError(null);
     try {
       const data = await deliveryService.getDeliveryById(id);
@@ -144,29 +160,33 @@ export default function DeliveryScreen() {
     }
   }, []);
 
-  const fetchMyDelivery = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const deliveries = await deliveryService.getMyDeliveries();
-      setDelivery(deliveries[0] ?? null);
-    } catch (err: any) {
-      console.error("Erreur chargement livraisons en cours :", err);
-      setLoadError(
-        err.message || "Impossible de charger vos livraisons en cours.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const reloadDelivery = useCallback(
+    (silent: boolean) => fetchDelivery(deliveryId, silent),
+    [deliveryId, fetchDelivery],
+  );
 
+  // Chargement initial (avec spinner)
   useEffect(() => {
-    if (params.deliveryId) {
-      fetchDelivery(params.deliveryId);
-    } else {
-      fetchMyDelivery();
-    }
-  }, [params.deliveryId, fetchDelivery, fetchMyDelivery]);
+    reloadDelivery(false);
+  }, [reloadDelivery]);
+
+  // Rafraîchissement silencieux quand l'onglet reprend le focus
+  const isFirstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      reloadDelivery(true);
+    }, [reloadDelivery]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await reloadDelivery(true);
+    setRefreshing(false);
+  }, [reloadDelivery]);
 
   useEffect(() => {
     let subscription: Location.LocationSubscription | null = null;
@@ -268,6 +288,7 @@ export default function DeliveryScreen() {
           text: "Retour à l’accueil",
           onPress: () => {
             setDelivery(null);
+            goToList();
             router.replace("/");
           },
         },
@@ -318,19 +339,54 @@ export default function DeliveryScreen() {
       ? getBearing(currentLocation, destinationCoordinate)
       : 0);
   const cameraHeading = isNorthUp ? 0 : navigationHeading;
+  // Zoom choisi par l'utilisateur (pinch ou boutons), conservé lors des recentrages.
+  // Google Maps (Android) utilise `zoom`, Apple Maps (iOS) utilise `altitude`.
+  const userZoomRef = useRef<{ zoom?: number; altitude?: number }>({});
+
+  const rememberCameraZoom = useCallback(async () => {
+    const camera = await mapRef.current?.getCamera();
+    if (!camera) return;
+    if (typeof camera.zoom === "number") {
+      userZoomRef.current = { zoom: camera.zoom };
+    } else if (typeof camera.altitude === "number") {
+      userZoomRef.current = { altitude: camera.altitude };
+    }
+  }, []);
+
   const recenterMap = useCallback(() => {
     const center = currentLocation ?? destinationCoordinate;
     if (!center) return;
+    const { zoom, altitude } = userZoomRef.current;
     mapRef.current?.animateCamera(
       {
         center,
         heading: cameraHeading,
         pitch: 65,
-        zoom: currentLocation ? 17 : 14,
+        ...(altitude !== undefined
+          ? { altitude }
+          : { zoom: zoom ?? (currentLocation ? 17 : 14) }),
       },
       { duration: 450 },
     );
   }, [currentLocation, destinationCoordinate, cameraHeading]);
+
+  // direction > 0 : zoom avant, < 0 : zoom arrière
+  const changeZoom = useCallback(async (direction: 1 | -1) => {
+    const camera = await mapRef.current?.getCamera();
+    if (!camera) return;
+    if (typeof camera.zoom === "number") {
+      const zoom = Math.min(20, Math.max(3, camera.zoom + direction));
+      userZoomRef.current = { zoom };
+      mapRef.current?.animateCamera({ zoom }, { duration: 250 });
+    } else if (typeof camera.altitude === "number") {
+      const altitude = Math.max(
+        200,
+        direction > 0 ? camera.altitude / 2 : camera.altitude * 2,
+      );
+      userZoomRef.current = { altitude };
+      mapRef.current?.animateCamera({ altitude }, { duration: 250 });
+    }
+  }, []);
 
   useEffect(() => {
     if (!isMapExpanded || !currentLocation) return;
@@ -462,7 +518,7 @@ export default function DeliveryScreen() {
               marginTop: 12,
             }}
           >
-            {loadError ? "Erreur de chargement" : "Aucune livraison en cours"}
+            {loadError ? "Erreur de chargement" : "Livraison introuvable"}
           </Text>
           <Text
             style={{
@@ -472,7 +528,7 @@ export default function DeliveryScreen() {
             }}
           >
             {loadError ||
-              "Consultez les commandes disponibles sur l'onglet Accueil pour en accepter une."}
+              "Cette livraison n'est plus disponible ou ne vous est pas assignée."}
           </Text>
           {loadError && (
             <TouchableOpacity
@@ -484,26 +540,24 @@ export default function DeliveryScreen() {
                   backgroundColor: colors.primary,
                 },
               ]}
-              onPress={fetchMyDelivery}
+              onPress={() => reloadDelivery(false)}
             >
               <Text style={styles.actionBtnText}>Réessayer</Text>
             </TouchableOpacity>
           )}
-          {!loadError && (
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                {
-                  width: "80%",
-                  marginTop: 20,
-                  backgroundColor: colors.primary,
-                },
-              ]}
-              onPress={() => router.replace("/")}
-            >
-              <Text style={styles.actionBtnText}>Voir les commandes</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              {
+                width: "80%",
+                marginTop: 20,
+                backgroundColor: colors.primary,
+              },
+            ]}
+            onPress={goToList}
+          >
+            <Text style={styles.actionBtnText}>Retour à mes livraisons</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -524,7 +578,28 @@ export default function DeliveryScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
+        <TouchableOpacity
+          onPress={goToList}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.primary} />
+          <Text style={{ color: colors.primary, fontWeight: "600" }}>
+            Mes livraisons
+          </Text>
+        </TouchableOpacity>
+
         {/* Progression visuelle */}
         <View
           style={[
@@ -900,17 +975,16 @@ export default function DeliveryScreen() {
               {
                 backgroundColor: colors.surface,
                 borderBottomColor: colors.border,
-                minHeight: 92,
-                paddingTop: 12,
-                paddingBottom: 12,
+                minHeight: 68,
+                paddingVertical: 6,
               },
             ]}
           >
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, marginRight: 12, marginTop: 50 }}>
               <Text
                 style={[
                   styles.topBarTitle,
-                  { color: colors.textDark, fontSize: 18 },
+                  { color: colors.textDark, fontSize: 17 },
                 ]}
                 numberOfLines={1}
               >
@@ -919,7 +993,10 @@ export default function DeliveryScreen() {
                   : "Guidage vers le restaurant"}
               </Text>
               <Text
-                style={[styles.itemSubtitle, { color: colors.textSecondary }]}
+                style={[
+                  styles.itemSubtitle,
+                  { color: colors.textSecondary, fontSize: 12 },
+                ]}
                 numberOfLines={1}
               >
                 {activeDestination.address}
@@ -930,10 +1007,11 @@ export default function DeliveryScreen() {
                 styles.backButton,
                 {
                   backgroundColor: colors.primary,
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   zIndex: 10,
                   elevation: 10,
+                  marginTop: 50,
                 },
               ]}
               onPress={() => setIsMapExpanded(false)}
@@ -943,268 +1021,329 @@ export default function DeliveryScreen() {
             </TouchableOpacity>
           </View>
 
-          <MapView
-            ref={mapRef}
-            style={{ flex: 1 }}
-            initialCamera={{
-              center: activeMapCenter,
-              pitch: 65,
-              heading: cameraHeading,
-              zoom: currentLocation ? 17 : 14,
-            }}
-            showsUserLocation
-            showsMyLocationButton
-            showsCompass={false}
-            rotateEnabled
-            pitchEnabled
-            mapType={mapType}
-            showsBuildings
-            loadingEnabled
-            onMapReady={recenterMap}
-            onUserLocationChange={() => {
-              if (isMapExpanded) {
-                recenterMap();
-              }
-            }}
-          >
-            <Marker
-              coordinate={activeDestinationCoordinate}
-              title={isPickedUp ? "Adresse de livraison" : "Restaurant"}
-              description={activeDestination.address}
-              pinColor={colors.primary}
-            />
-            {currentLocation && (
-              <>
-                <Polyline
-                  coordinates={
-                    routeCoordinates.length > 0
-                      ? routeCoordinates
-                      : [currentLocation, activeDestinationCoordinate]
-                  }
-                  strokeColor={ROUTE_OUTLINE_COLOR}
-                  strokeWidth={11}
-                />
-                <Polyline
-                  coordinates={
-                    routeCoordinates.length > 0
-                      ? routeCoordinates
-                      : [currentLocation, activeDestinationCoordinate]
-                  }
-                  strokeColor={ROUTE_COLOR}
-                  strokeWidth={6}
-                />
-              </>
-            )}
-          </MapView>
+          <View style={{ flex: 1 }}>
+            <MapView
+              ref={mapRef}
+              style={{ flex: 1 }}
+              initialCamera={{
+                center: activeMapCenter,
+                pitch: 65,
+                heading: cameraHeading,
+                zoom: currentLocation ? 17 : 14,
+              }}
+              showsUserLocation
+              showsMyLocationButton
+              showsCompass={false}
+              rotateEnabled
+              pitchEnabled
+              mapType={mapType}
+              showsBuildings
+              loadingEnabled
+              onMapReady={recenterMap}
+              onRegionChangeComplete={rememberCameraZoom}
+              onUserLocationChange={() => {
+                if (isMapExpanded) {
+                  recenterMap();
+                }
+              }}
+            >
+              <Marker
+                coordinate={activeDestinationCoordinate}
+                title={isPickedUp ? "Adresse de livraison" : "Restaurant"}
+                description={activeDestination.address}
+                pinColor={colors.primary}
+              />
+              {currentLocation && (
+                <>
+                  <Polyline
+                    coordinates={
+                      routeCoordinates.length > 0
+                        ? routeCoordinates
+                        : [currentLocation, activeDestinationCoordinate]
+                    }
+                    strokeColor={ROUTE_OUTLINE_COLOR}
+                    strokeWidth={11}
+                  />
+                  <Polyline
+                    coordinates={
+                      routeCoordinates.length > 0
+                        ? routeCoordinates
+                        : [currentLocation, activeDestinationCoordinate]
+                    }
+                    strokeColor={ROUTE_COLOR}
+                    strokeWidth={6}
+                  />
+                </>
+              )}
+            </MapView>
 
-          {nextStep && nextStepDistance !== null && (
-            <View
+            {nextStep && nextStepDistance !== null && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 12,
+                  left: 16,
+                  right: 16,
+                  backgroundColor: colors.primary,
+                  borderRadius: 16,
+                  paddingHorizontal: 16,
+                  paddingVertical: 13,
+                  shadowColor: "#000000",
+                  shadowOpacity: 0.22,
+                  shadowRadius: 10,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 7,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.accentLight,
+                    fontSize: 12,
+                    fontWeight: "800",
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  PROCHAINE MANŒUVRE · {formatDistance(nextStepDistance)}
+                </Text>
+                <Text
+                  style={{
+                    color: colors.white,
+                    fontSize: 18,
+                    lineHeight: 23,
+                    fontWeight: "800",
+                    marginTop: 4,
+                  }}
+                  numberOfLines={2}
+                >
+                  {getManeuverLabel(nextStep)}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
               style={{
                 position: "absolute",
-                top: 158,
-                left: 16,
-                right: 16,
-                backgroundColor: colors.primary,
-                borderRadius: 14,
-                paddingHorizontal: 16,
-                paddingVertical: 14,
+                right: 18,
+                bottom: 310,
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: colors.surface,
+                alignItems: "center",
+                justifyContent: "center",
                 shadowColor: "#000000",
                 shadowOpacity: 0.2,
                 shadowRadius: 8,
                 shadowOffset: { width: 0, height: 3 },
                 elevation: 6,
               }}
+              onPress={() => changeZoom(1)}
+              accessibilityRole="button"
+              accessibilityLabel="Zoomer"
             >
-              <Text
-                style={{
-                  color: colors.accentLight,
-                  fontSize: 12,
-                  fontWeight: "700",
-                }}
-              >
-                PROCHAINE MANŒUVRE • {formatDistance(nextStepDistance)}
-              </Text>
-              <Text
-                style={{
-                  color: colors.white,
-                  fontSize: 18,
-                  fontWeight: "800",
-                  marginTop: 3,
-                }}
-                numberOfLines={2}
-              >
-                {getManeuverLabel(nextStep)}
-              </Text>
-            </View>
-          )}
+              <Ionicons name="add" size={22} color={ROUTE_COLOR} />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={{
-              position: "absolute",
-              right: 18,
-              bottom: 190,
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: colors.surface,
-              alignItems: "center",
-              justifyContent: "center",
-              shadowColor: "#000000",
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-              elevation: 6,
-            }}
-            onPress={recenterMap}
-            disabled={!currentLocation}
-            accessibilityRole="button"
-            accessibilityLabel="Recentrer la carte sur ma position"
-          >
-            <Ionicons
-              name="navigate"
-              size={24}
-              color={currentLocation ? ROUTE_COLOR : colors.textSecondary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              position: "absolute",
-              left: 18,
-              bottom: 190,
-              width: 58,
-              height: 58,
-              borderRadius: 29,
-              backgroundColor: colors.surface,
-              alignItems: "center",
-              justifyContent: "center",
-              shadowColor: "#000000",
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-              elevation: 6,
-            }}
-            onPress={() =>
-              setMapType((currentType) =>
-                currentType === "standard" ? "satellite" : "standard",
-              )
-            }
-            accessibilityRole="button"
-            accessibilityLabel={
-              mapType === "standard"
-                ? "Activer la vue satellite"
-                : "Revenir à la carte standard"
-            }
-          >
-            <Ionicons
-              name={mapType === "standard" ? "layers-outline" : "map-outline"}
-              size={25}
-              color={colors.primary}
-            />
-            <Text
-              style={{
-                fontSize: 8,
-                fontWeight: "800",
-                color: colors.primary,
-                marginTop: 1,
-              }}
-            >
-              {mapType === "standard" ? "SAT" : "CARTE"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              position: "absolute",
-              right: 82,
-              bottom: 190,
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: colors.surface,
-              alignItems: "center",
-              justifyContent: "center",
-              shadowColor: "#000000",
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-              elevation: 6,
-            }}
-            onPress={() => setIsNorthUp((currentMode) => !currentMode)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isNorthUp
-                ? "Orienter la carte dans le sens de conduite"
-                : "Afficher le nord en haut"
-            }
-          >
-            <Ionicons
-              name="compass"
-              size={30}
-              color={colors.primary}
-              style={{
-                transform: [
-                  { rotate: `${isNorthUp ? 0 : -navigationHeading}deg` },
-                ],
-              }}
-            />
-            <Text
-              style={{
-                position: "absolute",
-                top: 5,
-                fontSize: 9,
-                fontWeight: "800",
-                color: colors.accent,
-              }}
-            >
-              N
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.card,
-              {
-                position: "absolute",
-                left: 16,
-                right: 16,
-                bottom: 16,
-                marginBottom: 0,
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <Text style={[styles.itemTitle, { color: colors.textDark }]}>
-              {remainingDistance !== null
-                ? `${routeDistance !== null ? formatDistance(routeDistance) : formatDistance(remainingDistance)} restantes`
-                : "Recherche de votre position..."}
-            </Text>
-            {routeDuration !== null && (
-              <Text
-                style={[styles.itemSubtitle, { color: colors.textSecondary }]}
-              >
-                Temps estimé : {Math.max(1, Math.round(routeDuration / 60))} min
-              </Text>
-            )}
             <TouchableOpacity
               style={{
-                marginTop: 12,
-                minHeight: 44,
-                borderRadius: 8,
-                backgroundColor: colors.inputBg,
+                position: "absolute",
+                right: 18,
+                bottom: 256,
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: colors.surface,
                 alignItems: "center",
                 justifyContent: "center",
+                shadowColor: "#000000",
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 6,
               }}
-              onPress={() => setIsMapExpanded(false)}
+              onPress={() => changeZoom(-1)}
               accessibilityRole="button"
-              accessibilityLabel="Quitter le mode GPS"
+              accessibilityLabel="Dézoomer"
             >
-              <Text style={[styles.itemTitle, { color: colors.primary }]}>
-                Quitter le mode GPS
+              <Ionicons name="remove" size={22} color={ROUTE_COLOR} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                position: "absolute",
+                right: 18,
+                bottom: 190,
+                width: 52,
+                height: 52,
+                borderRadius: 26,
+                backgroundColor: colors.surface,
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "#000000",
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 6,
+              }}
+              onPress={recenterMap}
+              disabled={!currentLocation}
+              accessibilityRole="button"
+              accessibilityLabel="Recentrer la carte sur ma position"
+            >
+              <Ionicons
+                name="navigate"
+                size={24}
+                color={currentLocation ? ROUTE_COLOR : colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                position: "absolute",
+                left: 18,
+                bottom: 190,
+                width: 58,
+                height: 58,
+                borderRadius: 29,
+                backgroundColor: colors.surface,
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "#000000",
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 6,
+              }}
+              onPress={() =>
+                setMapType((currentType) =>
+                  currentType === "standard" ? "satellite" : "standard",
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel={
+                mapType === "standard"
+                  ? "Activer la vue satellite"
+                  : "Revenir à la carte standard"
+              }
+            >
+              <Ionicons
+                name={mapType === "standard" ? "layers-outline" : "map-outline"}
+                size={25}
+                color={colors.primary}
+              />
+              <Text
+                style={{
+                  fontSize: 8,
+                  fontWeight: "800",
+                  color: colors.primary,
+                  marginTop: 1,
+                }}
+              >
+                {mapType === "standard" ? "SAT" : "CARTE"}
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                position: "absolute",
+                right: 82,
+                bottom: 190,
+                width: 52,
+                height: 52,
+                borderRadius: 26,
+                backgroundColor: colors.surface,
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "#000000",
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 6,
+              }}
+              onPress={() => setIsNorthUp((currentMode) => !currentMode)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isNorthUp
+                  ? "Orienter la carte dans le sens de conduite"
+                  : "Afficher le nord en haut"
+              }
+            >
+              <Ionicons
+                name="compass"
+                size={30}
+                color={colors.primary}
+                style={{
+                  transform: [
+                    { rotate: `${isNorthUp ? 0 : -navigationHeading}deg` },
+                  ],
+                }}
+              />
+              <Text
+                style={{
+                  position: "absolute",
+                  top: 5,
+                  fontSize: 9,
+                  fontWeight: "800",
+                  color: colors.accent,
+                }}
+              >
+                N
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.card,
+                {
+                  position: "absolute",
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  marginBottom: 0,
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: 18,
+                  padding: 16,
+                  shadowColor: "#000000",
+                  shadowOpacity: 0.16,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: -2 },
+                  elevation: 8,
+                },
+              ]}
+            >
+              <Text style={[styles.itemTitle, { color: colors.textDark }]}>
+                {remainingDistance !== null
+                  ? `${routeDistance !== null ? formatDistance(routeDistance) : formatDistance(remainingDistance)} restantes`
+                  : "Recherche de votre position..."}
+              </Text>
+              {routeDuration !== null && (
+                <Text
+                  style={[styles.itemSubtitle, { color: colors.textSecondary }]}
+                >
+                  Temps estimé : {Math.max(1, Math.round(routeDuration / 60))}{" "}
+                  min
+                </Text>
+              )}
+              <TouchableOpacity
+                style={{
+                  marginTop: 12,
+                  minHeight: 44,
+                  borderRadius: 8,
+                  backgroundColor: colors.inputBg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                onPress={() => setIsMapExpanded(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Quitter le mode GPS"
+              >
+                <Text style={[styles.itemTitle, { color: colors.primary }]}>
+                  Quitter le mode GPS
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </Modal>

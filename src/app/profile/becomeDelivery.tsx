@@ -18,6 +18,7 @@ import { BecomeDeliveryFormData, VehicleType } from "../../types/delivery";
 import { useTheme } from "../../context/ThemeContext";
 import { commonStyles } from "../../styles/common.styles";
 import { becomeDeliveryStyles as styles } from "../../styles/becomeDelivery.styles";
+import { courierService } from "../../services/courierService";
 
 const VEHICLES: {
   id: VehicleType;
@@ -91,12 +92,17 @@ export default function BecomeDeliveryScreen() {
       return;
     }
 
-    await upgradeToDelivery(formData);
-    Alert.alert(
-      "Félicitations !",
-      "Votre compte est désormais configuré en Livreur. L’onglet Livraison est maintenant accessible.",
-      [{ text: "Super !", onPress: () => router.replace("/delivery") }],
-    );
+    try {
+      await courierService.apply(formData);
+      await upgradeToDelivery(formData);
+      Alert.alert(
+        "Félicitations !",
+        "Votre compte est désormais configuré en Livreur.",
+        [{ text: "Super !", onPress: () => router.replace("/delivery") }],
+      );
+    } catch (error: any) {
+      Alert.alert("Activation impossible", error.message);
+    }
   };
 
   return (
