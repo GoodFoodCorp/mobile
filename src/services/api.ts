@@ -116,7 +116,9 @@ export async function apiClient<T>(
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const errorMessage = data?.message || `Erreur serveur (${response.status})`;
+    // Les services Go renvoient `message`, le Delivery-service (NestJS) `error`.
+    const errorMessage =
+      data?.message || data?.error || `Erreur serveur (${response.status})`;
     throw new Error(errorMessage);
   }
 
