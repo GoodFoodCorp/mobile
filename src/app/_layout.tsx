@@ -1,7 +1,6 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "../context/AuthContext";
 import { ThemeProvider } from "../context/ThemeContext";
-import { LocationProvider } from "../context/LocationContext";
 import { useEffect } from "react";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
@@ -22,9 +21,7 @@ export function NotificationListener() {
       (response) => {
         const data = response.notification.request.content.data;
 
-        if (data?.screen === "orders") {
-          router.push("/orders");
-        } else if (data?.screen === "delivery") {
+        if (data?.screen === "delivery") {
           router.push("/delivery");
         } else if (data?.screen === "delivery-home") {
           router.push("/");
@@ -45,19 +42,15 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <LocationProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="become-delivery" />
-            <Stack.Screen name="vehicle-status" />
-            <Stack.Screen name="earnings" />
-            <Stack.Screen name="personal-info" />
-            <Stack.Screen name="addresses" />
-            <Stack.Screen name="notifications" />
-            <Stack.Screen name="security" />
-            <Stack.Screen name="preferences" />
-          </Stack>
-        </LocationProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="vehicle-status" />
+          <Stack.Screen name="earnings" />
+          <Stack.Screen name="personal-info" />
+          <Stack.Screen name="notifications" />
+          <Stack.Screen name="security" />
+          <Stack.Screen name="preferences" />
+        </Stack>
       </AuthProvider>
     </ThemeProvider>
   );

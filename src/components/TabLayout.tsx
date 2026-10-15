@@ -8,12 +8,7 @@ export default function TabLayout() {
   const { colors } = useTheme();
 
   const firstName = user?.fullName ? user.fullName.split(" ")[0] : null;
-  const profileTabTitle = firstName ?? "Connexion / Inscription";
-
-  // Détection des rôles (en ignorant la casse)
-  const roleName = user?.role?.name?.toLowerCase();
-  const isClient = roleName === "client";
-  const isDelivery = roleName === "livreur";
+  const profileTabTitle = firstName ?? "Profil";
 
   return (
     <Tabs
@@ -21,14 +16,17 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.inactive,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          height: 65,
-          paddingBottom: 10,
-          paddingTop: 8,
-          borderTopWidth: 1,
-        },
+        // Non connecté : l'accueil affiche la connexion en plein écran, sans onglets.
+        tabBarStyle: user
+          ? {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+              height: 65,
+              paddingBottom: 10,
+              paddingTop: 8,
+              borderTopWidth: 1,
+            }
+          : { display: "none" },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "500",
@@ -45,24 +43,11 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Visible uniquement si connecté ET rôle Client */}
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: "Commandes",
-          href: isClient ? "/orders" : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cube-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      {/* Visible uniquement si connecté ET rôle Livreur */}
       <Tabs.Screen
         name="delivery"
         options={{
           title: "Livraison",
-          href: isDelivery ? "/delivery" : null,
+          href: user ? "/delivery" : null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="car-outline" size={size} color={color} />
           ),
@@ -73,12 +58,9 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: profileTabTitle,
+          href: user ? "/profile" : null,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name={user ? "person" : "person-outline"}
-              size={size}
-              color={color}
-            />
+            <Ionicons name="person" size={size} color={color} />
           ),
         }}
       />

@@ -8,34 +8,30 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert } from "react-native";
 
-import {
-  User,
-  LoginFormData,
-  RegisterFormData,
-  AuthApiResponse,
-} from "../types/auth";
+import { User, LoginFormData, AuthApiResponse } from "../types/auth";
 import { authService } from "../services/authService";
 import { setAuthListeners } from "../services/api";
 import { profileService } from "../services/profileService";
-import { mapJwtToUser } from "../utils/jwt";
+import { hasCourierRole, mapJwtToUser } from "../utils/jwt";
 
 const USER_STORAGE_KEY = "@goodfood_user_session";
 const ACCESS_TOKEN_KEY = "@goodfood_auth_token";
 const REFRESH_TOKEN_KEY = "@goodfood_refresh_token";
+
+const NOT_COURIER_MESSAGE =
+  "Cette application est réservée aux livreurs. Connectez-vous avec un compte livreur.";
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
   login: (data: LoginFormData) => Promise<void>;
-  register: (data: RegisterFormData) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: {
     fullName: string;
     email: string;
     phone: string;
   }) => Promise<void>;
-  upgradeToDelivery: (data: object) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -74,7 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const tokenVal = storedToken[1];
         const userVal = storedUser[1];
 
-        if (tokenVal && userVal) {
+        // Une session sans rôle livreur (ancienne version de l'app) est abandonnée.
+        if (tokenVal && !hasCourierRole(tokenVal)) {
+          await AsyncStorage.multiRemove([
+            ACCESS_TOKEN_KEY,
+            REFRESH_TOKEN_KEY,
+            USER_STORAGE_KEY,
+          ]);
+        } else if (tokenVal && userVal) {
           setToken(tokenVal);
           const storedUser = JSON.parse(userVal) as User;
           try {
@@ -108,6 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleAuthSuccess = async (response: AuthApiResponse) => {
     if (!response.access_token) {
       throw new Error("Réponse d’authentification invalide.");
+    }
+    // L'application est réservée aux livreurs : on ne garde aucune session
+    // pour un autre rôle, et on révoque le refresh token qui vient d'être émis.
+    if (!hasCourierRole(response.access_token)) {
+      await authService.revokeSession(response.refresh_token);
+      throw new Error(NOT_COURIER_MESSAGE);
     }
     const userFromJwt = mapJwtToUser(response.access_token);
 
@@ -153,25 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (data: RegisterFormData) => {
-    setIsLoading(true);
-    try {
-      const response = await authService.register(data);
-      if (response.access_token) {
-        await handleAuthSuccess(response);
-      } else {
-        await login({ email: data.email, password: data.password });
-      }
-    } catch (error: any) {
-      Alert.alert(
-        "Échec de l’inscription",
-        error.message || "Une erreur est survenue.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const logout = async () => {
     setIsLoading(true);
     try {
@@ -208,15 +198,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
   };
 
-  const upgradeToDelivery = async (data: object) => {
-    await authService.upgradeToDelivery(data);
-    if (user) {
-      const updatedUser = { ...user, role: { id: "livreur", name: "livreur" } };
-      setUser(updatedUser);
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
-    }
-  };
-
   const deleteAccount = async () => {
     await authService.deleteAccount();
     await logout();
@@ -229,10 +210,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         isLoading,
         login,
-        register,
         logout,
         updateProfile,
-        upgradeToDelivery,
         deleteAccount,
       }}
     >

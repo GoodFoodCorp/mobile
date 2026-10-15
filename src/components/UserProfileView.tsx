@@ -23,9 +23,6 @@ export default function UserProfileView({
     .toUpperCase()
     .slice(0, 2);
 
-  const isDelivery = user.role.name.toLowerCase() === "livreur";
-  const isClient = user.role.name.toLowerCase() === "client";
-
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
@@ -62,21 +59,19 @@ export default function UserProfileView({
       </View>
 
       {/* Menu spécifique Livreur */}
-      {isDelivery && (
-        <View style={styles.menuSection}>
-          <Text style={styles.menuTitle}>Espace Livreur</Text>
-          <ProfileMenuItem
-            iconName="bicycle-outline"
-            title="Mon véhicule et statut"
-            onPress={() => router.push("/profile/delivery/vehicleStatus")}
-          />
-          <ProfileMenuItem
-            iconName="cash-outline"
-            title="Historique des gains"
-            onPress={() => router.push("/profile/delivery/earnings")}
-          />
-        </View>
-      )}
+      <View style={styles.menuSection}>
+        <Text style={styles.menuTitle}>Espace Livreur</Text>
+        <ProfileMenuItem
+          iconName="bicycle-outline"
+          title="Mon véhicule et statut"
+          onPress={() => router.push("/profile/delivery/vehicleStatus")}
+        />
+        <ProfileMenuItem
+          iconName="cash-outline"
+          title="Historique des gains"
+          onPress={() => router.push("/profile/delivery/earnings")}
+        />
+      </View>
 
       {/* Menu Compte général */}
       <View style={styles.menuSection}>
@@ -85,11 +80,6 @@ export default function UserProfileView({
           iconName="person-outline"
           title="Mes infos personnelles"
           onPress={() => router.push("/profile/personalInfo")}
-        />
-        <ProfileMenuItem
-          iconName="location-outline"
-          title="Mes adresses"
-          onPress={() => router.push("/profile/addresses")}
         />
         <ProfileMenuItem
           iconName="notifications-outline"
@@ -106,13 +96,6 @@ export default function UserProfileView({
           title="Préférences"
           onPress={() => router.push("/profile/preferences")}
         />
-        {isClient && (
-          <ProfileMenuItem
-            iconName="bicycle-outline"
-            title="Devenir Livreur"
-            onPress={() => router.push("/profile/becomeDelivery")}
-          />
-        )}
       </View>
 
       {/* Déconnexion */}

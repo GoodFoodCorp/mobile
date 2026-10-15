@@ -11,21 +11,3 @@ export interface ProfileUpdate {
   last_name: string;
   phone: string;
 }
-
-export interface Address {
-  id: string;
-  label: string;
-  street: string;
-  zip_code: string;
-  city: string;
-  is_default: boolean;
-  full_address: string;
-}
-
-export interface AddressInput {
-  label: string;
-  street: string;
-  zip_code: string;
-  city: string;
-  is_default: boolean;
-}

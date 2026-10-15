@@ -52,3 +52,17 @@ export function mapJwtToUser(token: string): User {
     createdAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Vrai si le token contient le rôle livreur (l'application mobile est
+ * réservée aux livreurs). Un token illisible est considéré comme non livreur.
+ */
+export function hasCourierRole(token: string): boolean {
+  try {
+    const payload = decodeJwt(token);
+    const roles = [...(payload.role_slugs ?? []), ...(payload.roles ?? [])];
+    return roles.some((role) => role.toLowerCase() === "livreur");
+  } catch {
+    return false;
+  }
+}

@@ -1,9 +1,5 @@
 import { apiClient } from "./api";
-import {
-  LoginFormData,
-  RegisterFormData,
-  AuthApiResponse,
-} from "../types/auth";
+import { LoginFormData, AuthApiResponse } from "../types/auth";
 
 export const authService = {
   async deleteAccount(): Promise<void> {
@@ -25,13 +21,6 @@ export const authService = {
       requiresAuth: true,
     });
   },
-  async upgradeToDelivery(data: object): Promise<void> {
-    await apiClient<void>("/api/auth/upgrade-to-delivery", {
-      method: "POST",
-      body: JSON.stringify(data),
-      requiresAuth: true,
-    });
-  },
   async login(credentials: LoginFormData): Promise<AuthApiResponse> {
     return apiClient<AuthApiResponse>("/api/auth/login", {
       method: "POST",
@@ -42,10 +31,12 @@ export const authService = {
     });
   },
 
-  async register(data: RegisterFormData): Promise<AuthApiResponse> {
-    return apiClient<AuthApiResponse>("/api/auth/register", {
+  /** Révoque un refresh token côté serveur (sans erreur si déjà invalide). */
+  async revokeSession(refreshToken?: string): Promise<void> {
+    if (!refreshToken) return;
+    await apiClient<void>("/api/auth/logout", {
       method: "POST",
-      body: JSON.stringify(data),
-    });
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }).catch(() => undefined);
   },
 };
