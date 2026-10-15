@@ -26,6 +26,7 @@ export interface DeliveryDetail {
   pickedUpAt: string | null;
   deliveredAt: string | null;
   estimatedDeliveryTime: string;
+  courierFeeCents?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,4 +67,20 @@ export interface AvailableDelivery {
   earnings: number;
   itemsCount: number;
   pickupTimeLimit: string;
+}
+
+export interface CourierHistoryTrip {
+  id: string;
+  orderId: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  deliveredAt: string | null;
+  amount: number;
+}
+
+export interface CourierHistory {
+  totalEarned: number;
+  availableBalance: number;
+  completedTrips: number;
+  trips: CourierHistoryTrip[];
 }

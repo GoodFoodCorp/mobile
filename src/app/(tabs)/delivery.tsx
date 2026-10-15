@@ -43,7 +43,8 @@ const toRadians = (value: number) => (value * Math.PI) / 180;
 const API_BASE_URL = "https://api.c-mbk.fr";
 const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
 const PICKUP_RADIUS_METERS = 100;
-const COURIER_EARNINGS_EUR = 4.5;
+// Repli pour les livraisons créées avant l'enregistrement du frais côté serveur
+const DEFAULT_COURIER_FEE_EUR = 4.5;
 const ROUTE_COLOR = "#1677ff";
 const ROUTE_OUTLINE_COLOR = "#ffffff";
 
@@ -563,6 +564,10 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
     );
   }
 
+  const courierFeeEur =
+    delivery.courierFeeCents != null
+      ? delivery.courierFeeCents / 100
+      : DEFAULT_COURIER_FEE_EUR;
   const activeDestination = isPickedUp ? delivery.dropoff : delivery.pickup;
   const activeDestinationCoordinate = {
     latitude: activeDestination.lat,
@@ -908,7 +913,7 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
                 { color: colors.textDark, fontSize: 24 },
               ]}
             >
-              +{COURIER_EARNINGS_EUR.toFixed(2)} €
+              +{courierFeeEur.toFixed(2)} €
             </Text>
           </View>
           <Ionicons name="wallet-outline" size={32} color={colors.primary} />

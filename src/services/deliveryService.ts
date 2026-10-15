@@ -1,5 +1,5 @@
 import { apiClient } from "./api";
-import { DeliveryDetail } from "../types/delivery";
+import { CourierHistory, DeliveryDetail } from "../types/delivery";
 
 export const deliveryService = {
   /**
@@ -15,6 +15,14 @@ export const deliveryService = {
   /** Récupérer les livraisons actives du coursier connecté */
   async getMyDeliveries(): Promise<DeliveryDetail[]> {
     return apiClient<DeliveryDetail[]>(`/api/deliveries/mine`, {
+      method: "GET",
+      requiresAuth: true,
+    });
+  },
+
+  /** Gains et courses livrées du coursier connecté */
+  async getHistory(): Promise<CourierHistory> {
+    return apiClient<CourierHistory>(`/api/deliveries/history`, {
       method: "GET",
       requiresAuth: true,
     });

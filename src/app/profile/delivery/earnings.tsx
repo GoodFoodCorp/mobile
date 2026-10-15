@@ -6,23 +6,37 @@ import { useRouter } from "expo-router";
 
 import { useTheme } from "../../../context/ThemeContext";
 import { deliverySpaceStyles as styles } from "../../../styles/deliverySpace.styles";
-import { courierService } from "../../../services/courierService";
+import { deliveryService } from "../../../services/deliveryService";
+import { CourierHistory } from "../../../types/delivery";
 
 export default function EarningsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const [earnings, setEarnings] = useState({
-    availableBalance: 0,
+  const [history, setHistory] = useState<CourierHistory>({
     totalEarned: 0,
+    availableBalance: 0,
     completedTrips: 0,
+    trips: [],
   });
 
   useEffect(() => {
-    courierService
-      .getEarnings()
-      .then(setEarnings)
+    deliveryService
+      .getHistory()
+      .then(setHistory)
       .catch((error: any) => Alert.alert("Gains indisponibles", error.message));
   }, []);
+
+  const formatEuro = (value: number) =>
+    `${value.toFixed(2).replace(".", ",")} €`;
+  const formatDate = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("fr-FR", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
 
   return (
     <SafeAreaView
@@ -49,11 +63,11 @@ export default function EarningsScreen() {
             Solde disponible
           </Text>
           <Text style={[styles.balanceAmount, { color: colors.white }]}>
-            {earnings.availableBalance.toFixed(2).replace(".", ",")} €
+            {formatEuro(history.availableBalance)}
           </Text>
         </View>
         <Text style={styles.sectionTitle}>
-          Total gagné : {earnings.totalEarned.toFixed(2).replace(".", ",")} €
+          Total gagné : {formatEuro(history.totalEarned)}
         </Text>
         <View
           style={[
@@ -65,13 +79,40 @@ export default function EarningsScreen() {
             Courses terminées
           </Text>
           <Text style={[styles.balanceAmount, { color: colors.primary }]}>
-            {earnings.completedTrips}
+            {history.completedTrips}
           </Text>
         </View>
-        {earnings.completedTrips === 0 && (
+        {history.trips.length === 0 ? (
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Aucune course rémunérée pour le moment.
           </Text>
+        ) : (
+          history.trips.map((trip) => (
+            <View key={trip.id} style={styles.tripCard}>
+              <View style={[styles.tripLeft, { flex: 1, paddingRight: 12 }]}>
+                <Text
+                  style={[styles.tripRestaurant, { color: colors.textDark }]}
+                  numberOfLines={1}
+                >
+                  {trip.pickupAddress}
+                </Text>
+                <Text
+                  style={[styles.tripMeta, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  → {trip.dropoffAddress}
+                </Text>
+                <Text
+                  style={[styles.tripMeta, { color: colors.textSecondary }]}
+                >
+                  {formatDate(trip.deliveredAt)}
+                </Text>
+              </View>
+              <Text style={[styles.tripAmount, { color: colors.primary }]}>
+                +{formatEuro(trip.amount)}
+              </Text>
+            </View>
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
