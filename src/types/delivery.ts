@@ -78,9 +78,23 @@ export interface CourierHistoryTrip {
   amount: number;
 }
 
+export interface Withdrawal {
+  id: string;
+  amount: number;
+  ibanMasked: string;
+  status: "PENDING" | "PAID";
+  requestedAt: string;
+  paidAt: string | null;
+}
+
 export interface CourierHistory {
   totalEarned: number;
   availableBalance: number;
+  withdrawnTotal: number;
+  pendingAmount: number;
+  minWithdrawal: number;
   completedTrips: number;
   trips: CourierHistoryTrip[];
+  ibanMasked: string;
+  withdrawals: Withdrawal[];
 }

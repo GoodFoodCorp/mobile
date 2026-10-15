@@ -1,5 +1,6 @@
 import { apiClient } from "./api";
 import { CourierApplication, CourierProfile } from "../types/courier";
+import { Withdrawal } from "../types/delivery";
 
 export const courierService = {
   getProfile() {
@@ -18,6 +19,19 @@ export const courierService = {
     return apiClient<CourierProfile>("/api/courier-profile/availability", {
       method: "PATCH",
       body: JSON.stringify({ isAvailable }),
+      requiresAuth: true,
+    });
+  },
+  setIban(iban: string) {
+    return apiClient<CourierProfile>("/api/courier-profile/iban", {
+      method: "PUT",
+      body: JSON.stringify({ iban }),
+      requiresAuth: true,
+    });
+  },
+  requestWithdrawal() {
+    return apiClient<Withdrawal>("/api/courier-profile/withdrawals", {
+      method: "POST",
       requiresAuth: true,
     });
   },
