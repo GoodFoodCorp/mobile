@@ -53,7 +53,6 @@ export default function RootLayout() {
             <Stack.Screen name="earnings" />
             <Stack.Screen name="personal-info" />
             <Stack.Screen name="addresses" />
-            <Stack.Screen name="payments" />
             <Stack.Screen name="notifications" />
             <Stack.Screen name="security" />
             <Stack.Screen name="preferences" />

@@ -31,7 +31,15 @@ export default function AuthInput({
       <View style={styles.inputWrapper}>
         <Ionicons name={iconName} size={20} color={colors.textSecondary} />
         <TextInput
-          style={[styles.input, { color: colors.textDark }]}
+          style={[
+            styles.input,
+            {
+              color:
+                inputProps.editable === false
+                  ? colors.textSecondary
+                  : colors.textDark,
+            },
+          ]}
           placeholderTextColor={colors.textSecondary}
           secureTextEntry={isPassword && !showPassword}
           autoCapitalize="none"

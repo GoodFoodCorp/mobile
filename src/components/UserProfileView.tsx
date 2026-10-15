@@ -92,11 +92,6 @@ export default function UserProfileView({
           onPress={() => router.push("/profile/addresses")}
         />
         <ProfileMenuItem
-          iconName="card-outline"
-          title="Moyens de paiement"
-          onPress={() => router.push("/profile/payments")}
-        />
-        <ProfileMenuItem
           iconName="notifications-outline"
           title="Notifications"
           onPress={() => router.push("/profile/notifications")}

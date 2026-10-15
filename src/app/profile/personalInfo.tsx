@@ -25,7 +25,8 @@ export default function PersonalInfoScreen() {
 
   // Initialisation du state avec les données de l'utilisateur
   const [fullName, setFullName] = useState(user?.fullName || "");
-  const [email, setEmail] = useState(user?.email || "");
+  // L'adresse e-mail est l'identifiant du compte : affichée mais non modifiable.
+  const email = user?.email || "";
   const [phone, setPhone] = useState(user?.phone || "");
 
   // Génération des initiales pour l'avatar
@@ -39,8 +40,8 @@ export default function PersonalInfoScreen() {
     : "GF";
 
   const handleSave = async () => {
-    if (!fullName.trim() || !email.trim()) {
-      Alert.alert("Erreur", "Le nom et l’adresse e-mail sont obligatoires.");
+    if (!fullName.trim()) {
+      Alert.alert("Erreur", "Le nom est obligatoire.");
       return;
     }
 
@@ -131,7 +132,7 @@ export default function PersonalInfoScreen() {
               iconName="mail-outline"
               keyboardType="email-address"
               value={email}
-              onChangeText={setEmail}
+              editable={false}
             />
 
             <AuthInput

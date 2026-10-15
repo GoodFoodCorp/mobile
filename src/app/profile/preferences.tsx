@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,26 +5,10 @@ import { useRouter } from "expo-router";
 
 import { useTheme } from "../../context/ThemeContext";
 import { subscreenStyles as styles } from "../../styles/subscreens.styles";
-import { settingsService } from "../../services/settingsService";
 
 export default function PreferencesScreen() {
   const router = useRouter();
   const { isDark, colors, toggleTheme } = useTheme();
-  const [cutlery, setCutlery] = useState(true);
-  useEffect(() => {
-    settingsService
-      .get()
-      .then((settings) => setCutlery(settings.cutlery))
-      .catch(() => undefined);
-  }, []);
-  const updateCutlery = async (value: boolean) => {
-    setCutlery(value);
-    try {
-      await settingsService.update({ cutlery: value });
-    } catch (error: any) {
-      setCutlery(!value);
-    }
-  };
 
   return (
     <SafeAreaView
@@ -74,36 +57,6 @@ export default function PreferencesScreen() {
             <Switch
               value={isDark}
               onValueChange={toggleTheme}
-              trackColor={{ false: "#bdc3c7", true: colors.primary }}
-              thumbColor={colors.white}
-            />
-          </View>
-        </View>
-
-        {/* Section Livraison */}
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-          Livraison & Repas
-        </Text>
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.rowBetween}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.itemTitle, { color: colors.textDark }]}>
-                Couverts et serviettes
-              </Text>
-              <Text
-                style={[styles.itemSubtitle, { color: colors.textSecondary }]}
-              >
-                Inclure systématiquement des couverts jetables
-              </Text>
-            </View>
-            <Switch
-              value={cutlery}
-              onValueChange={updateCutlery}
               trackColor={{ false: "#bdc3c7", true: colors.primary }}
               thumbColor={colors.white}
             />
