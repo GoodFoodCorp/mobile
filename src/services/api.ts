@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const API_BASE_URL = "https://api.c-mbk.fr";
+// Surchargeable pour tester contre une pile locale : EXPO_PUBLIC_API_URL=http://<ip-du-pc>:3000
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ?? "https://api.c-mbk.fr";
 const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
 const REFRESH_TOKEN_STORAGE_KEY = "@goodfood_refresh_token";
 

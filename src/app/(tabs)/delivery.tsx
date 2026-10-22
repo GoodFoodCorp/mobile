@@ -17,6 +17,7 @@ import * as Location from "expo-location";
 import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { API_BASE_URL } from "../../services/api";
 import { deliveryService } from "../../services/deliveryService";
 import DeliveryListView from "../../components/DeliveryListView";
 import { DeliveryDetail } from "../../types/delivery";
@@ -40,7 +41,6 @@ type RouteStep = {
 };
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
-const API_BASE_URL = "https://api.c-mbk.fr";
 const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
 const PICKUP_RADIUS_METERS = 100;
 // Repli pour les livraisons créées avant l'enregistrement du frais côté serveur
