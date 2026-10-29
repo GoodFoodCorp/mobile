@@ -1,11 +1,10 @@
 import { useEffect, useRef } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { tokenStore } from "../services/tokenStore";
 import { io } from "socket.io-client";
 
 import { API_BASE_URL } from "../services/api";
 import { courierService } from "../services/courierService";
 
-const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
 const MAX_AUTH_RETRIES = 3;
 
 /**
@@ -30,7 +29,7 @@ export function useAvailableDeliveriesSocket(
     const socket = io(`${API_BASE_URL}/tracking`, {
       transports: ["websocket"],
       auth: (cb) => {
-        AsyncStorage.getItem(TOKEN_STORAGE_KEY)
+        tokenStore.getAccessToken()
           .then((token) => cb({ token }))
           .catch(() => cb({}));
       },
@@ -43,6 +42,8 @@ export function useAvailableDeliveriesSocket(
     });
 
     socket.on("delivery:available", () => onChangeRef.current());
+    // A delivery cancelled before anyone took it disappears from the list.
+    socket.on("delivery:withdrawn", () => onChangeRef.current());
 
     socket.on("disconnect", (reason) => {
       if (

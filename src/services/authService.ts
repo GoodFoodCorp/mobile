@@ -2,9 +2,10 @@ import { apiClient } from "./api";
 import { LoginFormData, AuthApiResponse } from "../types/auth";
 
 export const authService = {
-  async deleteAccount(): Promise<void> {
+  async deleteAccount(password: string): Promise<void> {
     await apiClient<void>("/api/auth/account", {
       method: "DELETE",
+      body: JSON.stringify({ password }),
       requiresAuth: true,
     });
   },

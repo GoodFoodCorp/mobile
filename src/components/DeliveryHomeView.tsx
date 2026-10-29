@@ -20,7 +20,7 @@ import { registerCourierPushToken } from "../services/pushRegistration";
 import { useAvailableDeliveriesSocket } from "../hooks/useAvailableDeliveriesSocket";
 import { useTheme } from "../context/ThemeContext";
 import { User } from "../types/auth";
-import { DeliveryDetail } from "../types/delivery";
+import { OfferedDelivery } from "../types/delivery";
 import SectionHeader from "./SectionHeader";
 import { deliveryHomeStyles as styles } from "../styles/deliveryHome.styles";
 
@@ -30,7 +30,7 @@ interface DeliveryHomeViewProps {
 
 export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
   const [isOnline, setIsOnline] = useState(false);
-  const [deliveries, setDeliveries] = useState<DeliveryDetail[]>([]);
+  const [deliveries, setDeliveries] = useState<OfferedDelivery[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
@@ -107,14 +107,14 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
   const sortedDeliveries = useMemo(() => {
     return [...deliveries].sort(
       (a, b) =>
-        new Date(a.estimatedDeliveryTime).getTime() -
-        new Date(b.estimatedDeliveryTime).getTime(),
+        new Date(a.estimatedDeliveryTime ?? 0).getTime() -
+        new Date(b.estimatedDeliveryTime ?? 0).getTime(),
     );
   }, [deliveries]);
 
-  const handleAcceptDelivery = async (delivery: DeliveryDetail) => {
+  const handleAcceptDelivery = async (delivery: OfferedDelivery) => {
     try {
-      await deliveryService.acceptDelivery(delivery._id);
+      await deliveryService.acceptDelivery(delivery.id);
       Alert.alert(
         "Course acceptée !",
         "Rendez-vous au restaurant pour récupérer la commande.",
@@ -124,7 +124,7 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
             onPress: () =>
               router.push({
                 pathname: "/delivery",
-                params: { deliveryId: delivery._id },
+                params: { deliveryId: delivery.id },
               }),
           },
         ],
@@ -236,7 +236,7 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
 
                 return (
                   <View
-                    key={delivery._id}
+                    key={delivery.id}
                     style={[
                       styles.orderCard,
                       {
@@ -268,7 +268,7 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
                             { color: colors.textDark, fontWeight: "600" },
                           ]}
                         >
-                          Adresse de livraison
+                          Livraison (adresse révélée à l&apos;acceptation)
                         </Text>
                         <Text
                           style={[
@@ -276,7 +276,7 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
                             { color: colors.textSecondary },
                           ]}
                         >
-                          {delivery.dropoff.address}
+                          à {delivery.distanceKm} km du restaurant · {((delivery.courierFeeCents + delivery.tipCents) / 100).toFixed(2)} €
                         </Text>
                       </View>
                     </View>
@@ -287,17 +287,17 @@ export default function DeliveryHomeView({ user }: DeliveryHomeViewProps) {
                         <Text style={styles.orderDistanceMeta}>
                           Départ : {delivery.pickup.address}
                         </Text>
-                        <Text
-                          style={[styles.orderDistanceMeta, { fontSize: 11 }]}
-                        >
-                          Livraison estimée à{" "}
-                          {new Date(
-                            delivery.estimatedDeliveryTime,
-                          ).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </Text>
+                        {delivery.estimatedDeliveryTime && (
+                          <Text
+                            style={[styles.orderDistanceMeta, { fontSize: 11 }]}
+                          >
+                            Livraison estimée à{" "}
+                            {new Date(delivery.estimatedDeliveryTime).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </Text>
+                        )}
                       </View>
 
                       <TouchableOpacity

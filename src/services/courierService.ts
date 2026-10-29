@@ -49,4 +49,13 @@ export const courierService = {
       completedTrips: number;
     }>("/api/courier-profile/earnings", { requiresAuth: true });
   },
+
+  /** Position du livreur, pour lui proposer les courses proches. */
+  async reportLocation(lat: number, lng: number): Promise<void> {
+    await apiClient<void>("/api/courier-profile/location", {
+      method: "PUT",
+      body: JSON.stringify({ lat, lng }),
+      requiresAuth: true,
+    });
+  },
 };

@@ -1,9 +1,12 @@
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { courierService } from "./courierService";
 
 export const LOCATION_BACKGROUND_TASK = "GOODFOOD_DELIVERY_BACKGROUND_TRACKING";
 export const DRIVER_LAST_LOCATION_KEY = "@goodfood_driver_last_coords";
+const LOCATION_REPORT_INTERVAL_MS = 60_000;
+let lastReportedAt = 0;
 
 // 1. Définition de la tâche exécutée même app fermée/en tâche de fond
 TaskManager.defineTask(LOCATION_BACKGROUND_TASK, async ({ data, error }) => {
@@ -37,8 +40,12 @@ TaskManager.defineTask(LOCATION_BACKGROUND_TASK, async ({ data, error }) => {
         JSON.stringify(coords),
       );
 
-      // [Optionnel futur] Envoi websocket ou API pour diffuser la position en direct :
-      // await apiClient('/api/delivery/position', { method: 'POST', body: JSON.stringify(coords), requiresAuth: true });
+      // Partage la position (au plus une fois par minute) pour recevoir les
+      // courses proches du livreur.
+      if (coords.timestamp - lastReportedAt >= LOCATION_REPORT_INTERVAL_MS) {
+        lastReportedAt = coords.timestamp;
+        await courierService.reportLocation(coords.latitude, coords.longitude).catch(() => undefined);
+      }
     }
   }
 });

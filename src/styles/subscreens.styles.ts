@@ -89,4 +89,14 @@ export const subscreenStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  handoverInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    fontSize: 18,
+    letterSpacing: 4,
+    textAlign: "center",
+  },
 });

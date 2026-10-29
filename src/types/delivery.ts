@@ -31,6 +31,19 @@ export interface DeliveryDetail {
   updatedAt: string;
 }
 
+/** Course proposée avant acceptation : aucune donnée client, seulement la
+ *  zone de dépôt, la distance et la rémunération. */
+export interface OfferedDelivery {
+  id: string;
+  orderId: string;
+  pickup: DeliveryLocation;
+  dropoffArea: { lat: number; lng: number };
+  distanceKm: number;
+  courierFeeCents: number;
+  tipCents: number;
+  estimatedDeliveryTime: string | null;
+}
+
 export interface BecomeDeliveryFormData {
   vehicleType: VehicleType;
   siret: string;

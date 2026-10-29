@@ -1,10 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { tokenStore } from "./tokenStore";
 
 // Surchargeable pour tester contre une pile locale : EXPO_PUBLIC_API_URL=http://<ip-du-pc>:3000
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.c-mbk.fr";
-const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
-const REFRESH_TOKEN_STORAGE_KEY = "@goodfood_refresh_token";
 
 type AuthListeners = {
   onTokenRefreshed?: (accessToken: string) => void;
@@ -25,9 +23,7 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
-        const refreshToken = await AsyncStorage.getItem(
-          REFRESH_TOKEN_STORAGE_KEY,
-        );
+        const refreshToken = await tokenStore.getRefreshToken();
         if (!refreshToken) return null;
 
         const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
@@ -53,10 +49,7 @@ async function refreshAccessToken(): Promise<string | null> {
         const data = await response.json();
         if (!data?.access_token) return null;
 
-        await AsyncStorage.multiSet([
-          [TOKEN_STORAGE_KEY, data.access_token],
-          [REFRESH_TOKEN_STORAGE_KEY, data.refresh_token || refreshToken],
-        ]);
+        await tokenStore.save(data.access_token, data.refresh_token || refreshToken);
         authListeners.onTokenRefreshed?.(data.access_token);
         return data.access_token as string;
       } finally {
@@ -84,7 +77,7 @@ export async function apiClient<T>(
   };
 
   if (requiresAuth) {
-    const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = await tokenStore.getAccessToken();
 
     if (!token) {
       console.warn(
