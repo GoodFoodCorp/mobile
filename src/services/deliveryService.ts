@@ -1,13 +1,23 @@
 import { apiClient } from "./api";
-import { CourierHistory, DeliveryDetail } from "../types/delivery";
+import { OfferedDelivery, CourierHistory, DeliveryDetail } from "../types/delivery";
 
 export const deliveryService = {
   /**
    * Récupérer la liste des livraisons disponibles
    */
-  async getAvailableDeliveries(): Promise<DeliveryDetail[]> {
-    return apiClient<DeliveryDetail[]>(`/api/deliveries/available`, {
+  async getAvailableDeliveries(near?: { lat: number; lng: number }): Promise<OfferedDelivery[]> {
+    // Closest first when the courier's position is known.
+    const query = near ? `?lat=${near.lat}&lng=${near.lng}&radiusKm=10` : "";
+    return apiClient<OfferedDelivery[]>(`/api/deliveries/available${query}`, {
       method: "GET",
+      requiresAuth: true,
+    });
+  },
+
+  /** Rendre une course acceptée avant de l'avoir récupérée. */
+  async releaseDelivery(id: string): Promise<DeliveryDetail> {
+    return apiClient<DeliveryDetail>(`/api/deliveries/${id}/release`, {
+      method: "POST",
       requiresAuth: true,
     });
   },
@@ -51,9 +61,11 @@ export const deliveryService = {
   /**
    * Valider la remise au client final
    */
-  async dropoffDelivery(id: string): Promise<DeliveryDetail> {
+  async dropoffDelivery(id: string, code: string): Promise<DeliveryDetail> {
+    // Le code à 4 chiffres donné par le client prouve la remise.
     return apiClient<DeliveryDetail>(`/api/deliveries/${id}/dropoff`, {
       method: "POST",
+      body: JSON.stringify({ code }),
       requiresAuth: true,
     });
   },

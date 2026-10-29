@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,6 +29,7 @@ export default function PersonalInfoScreen() {
   // L'adresse e-mail est l'identifiant du compte : affichée mais non modifiable.
   const email = user?.email || "";
   const [phone, setPhone] = useState(user?.phone || "");
+  const [deletePassword, setDeletePassword] = useState("");
 
   // Génération des initiales pour l'avatar
   const initials = fullName
@@ -52,6 +54,10 @@ export default function PersonalInfoScreen() {
   };
 
   const handleDeleteAccount = () => {
+    if (!deletePassword) {
+      Alert.alert("Mot de passe requis", "Saisissez votre mot de passe pour confirmer la suppression.");
+      return;
+    }
     Alert.alert(
       "Supprimer le compte",
       "Êtes-vous sûr de vouloir supprimer définitivement votre compte ? Cette action est irréversible.",
@@ -62,7 +68,7 @@ export default function PersonalInfoScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteAccount();
+              await deleteAccount(deletePassword);
               router.replace("/(tabs)/profile");
             } catch (error: any) {
               Alert.alert("Suppression impossible", error.message);
@@ -156,6 +162,14 @@ export default function PersonalInfoScreen() {
           </TouchableOpacity>
 
           {/* Bouton de suppression de compte */}
+          <TextInput
+            value={deletePassword}
+            onChangeText={setDeletePassword}
+            secureTextEntry
+            placeholder="Mot de passe (pour supprimer le compte)"
+            placeholderTextColor={colors.textSecondary}
+            style={[styles.deletePasswordInput, { color: colors.textPrimary, borderColor: colors.border }]}
+          />
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={handleDeleteAccount}

@@ -8,14 +8,15 @@ import {
   ActivityIndicator,
   Modal,
   RefreshControl,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";
+import { tokenStore } from "../../services/tokenStore";
 import { io, Socket } from "socket.io-client";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_BASE_URL } from "../../services/api";
 import { deliveryService } from "../../services/deliveryService";
@@ -41,7 +42,6 @@ type RouteStep = {
 };
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
-const TOKEN_STORAGE_KEY = "@goodfood_auth_token";
 const PICKUP_RADIUS_METERS = 100;
 // Repli pour les livraisons créées avant l'enregistrement du frais côté serveur
 const DEFAULT_COURIER_FEE_EUR = 4.5;
@@ -130,6 +130,8 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  // Code à 4 chiffres donné par le client à la porte (preuve de livraison).
+  const [handoverCode, setHandoverCode] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(
     null,
@@ -202,7 +204,7 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
         return;
       }
 
-      const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+      const token = await tokenStore.getAccessToken();
       if (token) {
         trackingSocket = io(`${API_BASE_URL}/tracking`, {
           auth: { token },
@@ -281,9 +283,14 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
   // Étape 2 : Dépôt chez le client
   const handleDropoff = async () => {
     if (!delivery) return;
+    if (handoverCode.length !== 4) {
+      Alert.alert("Code requis", "Demandez au client le code à 4 chiffres affiché dans sa commande.");
+      return;
+    }
     setActionLoading(true);
     try {
-      await deliveryService.dropoffDelivery(delivery._id);
+      await deliveryService.dropoffDelivery(delivery._id, handoverCode);
+      setHandoverCode("");
       Alert.alert("Course terminée ! 🎉", "La livraison a bien été validée.", [
         {
           text: "Retour à l’accueil",
@@ -947,10 +954,20 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
             )}
           </TouchableOpacity>
         ) : (
+          <>
+          <TextInput
+            value={handoverCode}
+            onChangeText={(v) => setHandoverCode(v.replace(/\D/g, "").slice(0, 4))}
+            keyboardType="number-pad"
+            maxLength={4}
+            placeholder="Code client (4 chiffres)"
+            placeholderTextColor={colors.textSecondary}
+            style={[styles.handoverInput, { color: colors.textPrimary, borderColor: colors.border }]}
+          />
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: "#27ae60" }]}
             onPress={handleDropoff}
-            disabled={actionLoading}
+            disabled={actionLoading || handoverCode.length !== 4}
             activeOpacity={0.8}
           >
             {actionLoading ? (
@@ -961,6 +978,7 @@ function DeliveryDetailView({ deliveryId }: { deliveryId: string }) {
               </Text>
             )}
           </TouchableOpacity>
+          </>
         )}
       </ScrollView>
 

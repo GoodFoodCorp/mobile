@@ -11,12 +11,12 @@ import { Alert } from "react-native";
 import { User, LoginFormData, AuthApiResponse } from "../types/auth";
 import { authService } from "../services/authService";
 import { setAuthListeners } from "../services/api";
+import { tokenStore } from "../services/tokenStore";
 import { profileService } from "../services/profileService";
 import { hasCourierRole, mapJwtToUser } from "../utils/jwt";
 
+/** Display data only; the tokens live in secure storage (tokenStore). */
 const USER_STORAGE_KEY = "@goodfood_user_session";
-const ACCESS_TOKEN_KEY = "@goodfood_auth_token";
-const REFRESH_TOKEN_KEY = "@goodfood_refresh_token";
 
 const NOT_COURIER_MESSAGE =
   "Cette application est réservée aux livreurs. Connectez-vous avec un compte livreur.";
@@ -32,7 +32,8 @@ interface AuthContextType {
     email: string;
     phone: string;
   }) => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  /** Le mot de passe est exigé : une session volée ne suffit pas à supprimer le compte. */
+  deleteAccount: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,11 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       onSessionExpired: () => {
         setUser(null);
         setToken(null);
-        AsyncStorage.multiRemove([
-          ACCESS_TOKEN_KEY,
-          REFRESH_TOKEN_KEY,
-          USER_STORAGE_KEY,
-        ]).catch(() => {});
+        Promise.all([tokenStore.clear(), AsyncStorage.removeItem(USER_STORAGE_KEY)]).catch(() => {});
       },
     });
     return () => setAuthListeners({});
@@ -62,21 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadStoredSession() {
       try {
-        const [storedToken, storedUser] = await AsyncStorage.multiGet([
-          ACCESS_TOKEN_KEY,
-          USER_STORAGE_KEY,
-        ]);
-
-        const tokenVal = storedToken[1];
-        const userVal = storedUser[1];
+        const tokenVal = await tokenStore.getAccessToken();
+        const userVal = await AsyncStorage.getItem(USER_STORAGE_KEY);
 
         // Une session sans rôle livreur (ancienne version de l'app) est abandonnée.
         if (tokenVal && !hasCourierRole(tokenVal)) {
-          await AsyncStorage.multiRemove([
-            ACCESS_TOKEN_KEY,
-            REFRESH_TOKEN_KEY,
-            USER_STORAGE_KEY,
-          ]);
+          await Promise.all([tokenStore.clear(), AsyncStorage.removeItem(USER_STORAGE_KEY)]);
         } else if (tokenVal && userVal) {
           setToken(tokenVal);
           const storedUser = JSON.parse(userVal) as User;
@@ -121,11 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userFromJwt = mapJwtToUser(response.access_token);
 
     // Les tokens doivent être en stockage avant tout appel authentifié
-    // (apiClient les lit depuis AsyncStorage), sinon getProfile échoue.
-    await AsyncStorage.multiSet([
-      [ACCESS_TOKEN_KEY, response.access_token],
-      [REFRESH_TOKEN_KEY, response.refresh_token || ""],
-    ]);
+    // (apiClient les lit depuis le stockage sécurisé), sinon getProfile échoue.
+    await tokenStore.save(response.access_token, response.refresh_token);
 
     let hydratedUser = userFromJwt;
     try {
@@ -167,11 +152,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setUser(null);
       setToken(null);
-      await AsyncStorage.multiRemove([
-        ACCESS_TOKEN_KEY,
-        REFRESH_TOKEN_KEY,
-        USER_STORAGE_KEY,
-      ]);
+      const refreshToken = await tokenStore.getRefreshToken();
+      // Révoque la session côté serveur, puis efface tout localement.
+      if (refreshToken) await authService.revokeSession(refreshToken).catch(() => undefined);
+      await Promise.all([tokenStore.clear(), AsyncStorage.removeItem(USER_STORAGE_KEY)]);
     } finally {
       setIsLoading(false);
     }
@@ -198,8 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
   };
 
-  const deleteAccount = async () => {
-    await authService.deleteAccount();
+  const deleteAccount = async (password: string) => {
+    await authService.deleteAccount(password);
     await logout();
   };
 

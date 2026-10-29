@@ -89,4 +89,11 @@ export const personalInfoStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  deletePasswordInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 24,
+  },
 });
